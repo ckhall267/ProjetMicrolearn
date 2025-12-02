@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pandas
+pyyaml
+scikit-learn
+python-multipart
+boto3
+sqlalchemy
+asyncpg
+alembic        
+psycopg2-binary
+pydantic
+python-dotenv
