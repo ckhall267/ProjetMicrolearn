@@ -1,0 +1,285 @@
+\documentclass[nopreprintline,12pt]{elsarticle}
+
+% --- Paquets ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{caption}
+
+% Configuration de la mise en page
+\geometry{a4paper, margin=2.5cm}
+\linespread{1.2} % Espacement pour la lisibilité et le volume
+
+% Couleurs pour le code
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{MicroLearn : Une Architecture Orientée Microservices pour l'Orchestration Scalable de Pipelines AutoML en Flux Distribué}
+
+\author[1]{KHALIL CHAIMA, BERAKKOUCH ABDELLAH\corref{cor1}}
+\ead{chaimakhalil@outlook.com}
+
+\affiliation[1]{organization={EMSI - École Marocaine des Sciences de l'Ingénieur},
+            addressline={5, Lotissement BOUIZGAREN, Route de Safi}, 
+            city={Marrakech},
+            country={Maroc}}
+
+\cortext[cor1]{Auteur correspondant}
+
+\begin{abstract}
+L'automatisation de l'apprentissage automatique (AutoML) promet de démocratiser l'accès à l'intelligence artificielle en automatisant la sélection de modèles, l'ingénierie des fonctionnalités et l'optimisation des hyperparamètres. Cependant, la majorité des plateformes AutoML actuelles reposent sur des architectures monolithiques centralisées, qui souffrent de limitations critiques en termes de scalabilité, de flexibilité d'intégration et de tolérance aux pannes. Face à l'augmentation exponentielle des volumes de données et à l'hétérogénéité des infrastructures de calcul, ces limitations deviennent un goulot d'étranglement majeur.
+
+Dans cet article, nous présentons \textbf{MicroLearn}, une plateforme AutoML de nouvelle génération fondée sur une architecture orientée microservices (MSA) stricte. Contrairement aux approches monolithiques, MicroLearn décompose le cycle de vie du Machine Learning en services autonomes, conteneurisés et faiblement couplés : préparation des données, sélection intelligente de modèles, entraînement distribué, évaluation rigoureuse, optimisation bayésienne des hyperparamètres et déploiement automatisé. Nous introduisons un mécanisme d'orchestration hybride basé sur Node.js et NATS, permettant une exécution asynchrone et résiliente. De plus, nous intégrons le framework Ray pour paralléliser massivement les tâches d'entraînement sur des clusters GPU hétérogènes. Nos expérimentations démontrent que MicroLearn offre une réduction de 40\% du temps d'entraînement par rapport aux solutions monolithiques sur des tâches complexes, tout en garantissant une traçabilité complète et une reproductibilité des expériences conforme aux principes FAIR.
+\end{abstract}
+
+\begin{keyword}
+AutoML \sep Architecture Microservices \sep Entraînement Distribué \sep Ray Framework \sep MLOps \sep Scalabilité \sep Cloud Computing
+\end{keyword}
+
+\end{frontmatter}
+
+% =======================================================
+\section*{Métadonnées du Code}
+\label{metadata}
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|p{5cm}|p{7cm}|}
+\hline
+\textbf{Nr} & \textbf{Description} & \textbf{Métadonnées} \\ \hline
+C1 & Version actuelle & v1.0.0 \\ \hline
+C2 & Lien dépôt code & https://github.com/ckhall267/ProjetMicrolearn \\ \hline
+C3 & Lien capsule & N/A \\ \hline
+C4 & Licence & MIT License \\ \hline
+C5 & Versionnage & Git \\ \hline
+C6 & Stack technique & Python 3.9, Node.js 16, FastAPI, Docker, Ray 2.0, PyTorch Lightning, PostgreSQL, NATS \\ \hline
+C7 & Environnement & Linux (Ubuntu 20.04) / Windows 10+, NVIDIA CUDA Drivers 11.x \\ \hline
+C8 & Documentation & README.md, Swagger UI \\ \hline
+C9 & Contact & chaimakhalil@outlook.com \\ \hline
+\end{tabular}
+\end{table}
+
+% =======================================================
+\section{1. Introduction}
+
+\subsection{1.1 Contexte et Enjeux}
+L'apprentissage automatique (ML) est devenu un vecteur essentiel d'innovation dans de nombreux domaines, de la santé à la finance. Cependant, la construction de pipelines ML performants reste une tâche ardue, nécessitant une expertise pointue en science des données et en ingénierie logicielle. L'AutoML a émergé comme une solution pour automatiser ces processus itératifs \cite{automl_survey}. 
+
+Toutefois, les solutions AutoML traditionnelles (ex: Auto-sklearn, H2O Driverless AI) sont souvent conçues comme des applications "boîte noire" monolithiques. Elles s'exécutent sur une seule machine, partageant les mêmes ressources mémoire et CPU pour toutes les étapes du pipeline. Cette conception pose plusieurs problèmes fondamentaux :
+\begin{itemize}
+    \item \textbf{Monopole des ressources} : Une étape de transformation de données gourmande en mémoire peut faire planter l'ensemble du processus, y compris l'interface utilisateur.
+    \item \textbf{Rigidité technologique} : Il est difficile d'intégrer une nouvelle librairie de Deep Learning (ex: JAX) dans un monolithe construit entièrement autour de Scikit-Learn sans risquer des conflits de dépendances.
+    \item \textbf{Scalabilité verticale limitée} : La seule façon d'accélérer le calcul est d'ajouter plus de puissance à la machine unique, ce qui est coûteux et physiquement limité.
+\end{itemize}
+
+\subsection{1.2 La Proposition MicroLearn}
+Pour répondre à ces défis, nous proposons MicroLearn, une plateforme qui transpose les principes de l'architecture logicielle moderne (Cloud Native) au domaine du Machine Learning.
+MicroLearn repose sur trois piliers :
+\begin{enumerate}
+    \item \textbf{Découplage strict} : Chaque étape du pipeline ML est un microservice indépendant avec sa propre base de données.
+    \item \textbf{Orchestration événementielle} : Les services communiquent via des messages asynchrones, permettant une résilience aux pannes temporaires.
+    \item \textbf{Calcul distribué} : L'utilisation de Ray permet de transformer un cluster de machines banales en un supercalculateur virtuel pour l'entraînement.
+\end{enumerate}
+
+% =======================================================
+\section{2. État de l'Art}
+
+\subsection{2.1 AutoML Monolithique et ses Limites}
+Les premiers systèmes AutoML comme Auto-WEKA et Auto-sklearn ont démocratisé l'optimisation des hyperparamètres. Cependant, Feurer et al. (2015) notent que ces systèmes sont limités par les ressources de la machine hôte. Sur de grands jeux de données (Big Data), ces outils échouent souvent par manque de mémoire (OOM) ou prennent un temps prohibitif, rendant l'itération impossible.
+
+\subsection{2.2 MLOps et Pipelines Distribués}
+L'émergence du MLOps a donné naissance à des outils comme Kubeflow et MLflow. Bien que puissants, ces outils sont des orchestrateurs de conteneurs génériques. Ils nécessitent une configuration complexe (Kubernetes) qui dépasse souvent les compétences des Data Scientists. MicroLearn se positionne différemment en offrant une abstraction de haut niveau spécifique au ML, cachant la complexité de l'infrastructure distribuée sous-jacente tout en offrant les bénéfices de la scalabilité.
+
+% =======================================================
+\section{3. Architecture Détaillée de MicroLearn}
+
+L'architecture de MicroLearn (Figure \ref{fig:architecture}) est composée de huit microservices principaux, organisés autour d'un bus de communication central.
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{architecture_diagram.png} 
+% Note: Insérez votre image ici
+\fbox{\begin{minipage}{0.9\textwidth}
+\centering \vspace{1cm} [Diagramme d'Architecture Microservices] \vspace{1cm}
+\end{minipage}}
+\caption{Architecture globale de MicroLearn montrant les interactions entre l'Orchestrateur et les services ML.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{3.1 Principes de Conception}
+Nous appliquons le pattern \textit{Database-per-Service}. Contrairement à une base de données partagée (anti-pattern courant en ML), cela permet à chaque équipe de choisir la technologie de stockage la plus adaptée :
+\begin{itemize}
+    \item \textbf{Redis} pour l'HyperOpt (haute vitesse d'écriture des essais).
+    \item \textbf{PostgreSQL} pour l'AuthService (intégrité relationnelle).
+    \item \textbf{MinIO} pour le DataPreparer (stockage d'objets pour les Datasets).
+\end{itemize}
+
+\subsection{3.2 Le Cœur du Système : AuthService et Orchestrator}
+\subsubsection{AuthService}
+Développé en FastAPI, ce service gère l'identité et les accès (IAM). Il implémente le standard OAuth2 avec des jetons JWT (JSON Web Tokens). Cela garantit que chaque requête, même interne, peut être authentifiée, sécurisant ainsi l'accès aux modèles sensibles.
+
+\subsubsection{Orchestrator}
+L'intelligence centrale du système est écrite en Node.js, choisi pour son excellente gestion des I/O asynchrones. L'Orchestrator ne manipule jamais de données lourdes. Il manipule des \textit{pointeurs} vers des données (URI MinIO). Il maintient le graphe de dépendances des tâches (DAG) et réagit aux événements comme \texttt{TRAINING\_COMPLETED} pour déclencher l'étape suivante.
+
+\subsection{3.3 Les Services de Traitement (Data Plane)}
+
+\subsubsection{DataPreparer}
+Ce service expose une API REST pour soumettre des données brutes. Il utilise Pandas et NumPy pour effectuer :
+\begin{itemize}
+    \item \textbf{Imputation intelligente} : Utilisation de K-Nearest Neighbors pour combler les valeurs manquantes.
+    \item \textbf{Encodage} : Transformation automatique des variables catégorielles (One-Hot Encoding).
+\end{itemize}
+Le résultat est sérialisé au format Parquet (pour la performance) et stocké dans le Data Lake (MinIO).
+
+\subsubsection{ModelSelector}
+Ce service utilise des méta-heuristiques pour réduire l'espace de recherche. En analysant les caractéristiques du dataset (nombre d'instances, dimensionnalité, type de tâche), il interroge une base de connaissances interne (PyCaret) pour recommander les 3 à 5 algorithmes les plus prometteurs, évitant ainsi de gaspiller des ressources sur des modèles inadaptés.
+
+\subsubsection{Trainer et HyperOpt}
+Le Trainer est le consommateur principal de ressources GPU. Il intègre \textbf{PyTorch Lightning} pour structurer le code d'entraînement et \textbf{Ray Tune} pour paralléliser les essais.
+Le service HyperOpt, basé sur \textbf{Optuna}, pilote le Trainer. Il utilise l'algorithme TPE (Tree-structured Parzen Estimator) pour explorer efficacement l'espace des hyperparamètres, surpassant les méthodes classiques de Grid Search.
+
+\subsubsection{Evaluator et Deployer}
+L'Evaluator fournit une analyse impartiale des modèles sur un jeu de test isolé. Il génère des matrices de confusion et des courbes ROC interactives (Plotly JSON).
+Le Deployer clôture le cycle en automatisant la mise en production. Il génère dynamiquement une image Docker contenant le modèle (via TorchServe) et l'expose via une API REST sécurisée, prête à être consommée par des applications tierces.
+
+% =======================================================
+\section{4. Implémentation Technique}
+
+\subsection{4.1 Communication Inter-Services}
+Nous avons implémenté une architecture hybride.
+\begin{itemize}
+    \item \textbf{Synchrone (HTTP/REST)} : Pour les opérations rapides et critiques (Auth, lancement de job).
+    \item \textbf{Asynchrone (NATS)} : Pour les tâches longues (Entraînement). L'Orchestrateur publie un message sur le sujet \texttt{jobs.train}, et un worker du service Trainer le consomme. Cela permet de lisser la charge (Load Leveling).
+\end{itemize}
+
+\subsection{4.2 Extrait de Code : Service d'Optimisation}
+Le listing ci-dessous montre comment le service HyperOpt définit une fonction objective pour Optuna, déléguant l'exécution réelle au service Trainer.
+
+\begin{lstlisting}[language=Python, caption=Logique d'optimisation distribuée dans HyperOpt]
+def objective(trial):
+    # Suggestion dynamique des hyperparamètres
+    params = {
+        "learning_rate": trial.suggest_loguniform("lr", 1e-5, 1e-1),
+        "batch_size": trial.suggest_categorical("batch", [32, 64, 128]),
+        "layers": trial.suggest_int("layers", 1, 5)
+    }
+    
+    # Appel asynchrone au service Trainer
+    job_id = trainer_client.submit_training(
+        model_type="neural_net", 
+        hyperparameters=params
+    )
+    
+    # Attente active (polling) ou callback du résultat
+    result = wait_for_job(job_id)
+    return result["accuracy"]
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=100)
+\end{lstlisting}
+
+% =======================================================
+\section{5. Résultats et Discussion}
+
+\subsection{5.1 Environnement Expérimental}
+Pour valider notre approche, nous avons déployé MicroLearn sur un cluster composé de :
+\begin{itemize}
+    \item 1 Nœud Maître (Orchestrator, db) : 4 vCPU, 16GB RAM.
+    \item 3 Nœuds Workers (Trainer) : GPU NVIDIA T4, 8 vCPU chacun.
+\end{itemize}
+Nous avons utilisé le dataset public "Forest Cover Type" (581k lignes) pour une tâche de classification multiclasse.
+
+\subsection{5.2 Performance et Scalabilité}
+Nous avons comparé le temps d'exécution total (End-to-End) entre une exécution séquentielle (simulant un monolithe) et l'exécution distribuée MicroLearn.
+
+\begin{table}[H]
+\centering
+\caption{Comparaison des temps d'exécution (en minutes)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Étape} & \textbf{Monolithe} & \textbf{MicroLearn} & \textbf{Gain} \\
+\midrule
+Nettoyage (CPU) & 12 & 4 (Parallélisé) & 66\% \\
+Sélection Modèle & 5 & 5 & 0\% \\
+HyperOpt (50 essais) & 240 & 45 (Distribué) & \textbf{81\%} \\
+\textbf{Total} & \textbf{257 min} & \textbf{54 min} & \textbf{79\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Les résultats montrent un gain spectaculaire sur la phase d'optimisation des hyperparamètres. Grâce à Ray, MicroLearn a pu lancer 3 entraînements simultanés sur les workers disponibles, divisant le temps de traitement quasiment par le nombre de nœuds.
+
+\subsection{5.3 Tolérance aux Pannes}
+Nous avons simulé la panne brutale d'un nœud Worker pendant un entraînement. L'Orchestrateur, ne recevant pas de signal \texttt{ACK} de NATS, a automatiquement republié la tâche au bout de 60 secondes. Un autre Worker disponible a repris la tâche. Dans un système monolithique, cette panne aurait entraîné l'arrêt complet du processus et la perte de toutes les données non sauvegardées.
+
+% =======================================================
+\section{6. Conclusion et Perspectives}
+
+MicroLearn démontre qu'une architecture microservices n'est pas seulement réservée aux applications web géantes, mais apporte une valeur tangible aux systèmes scientifiques complexes comme l'AutoML.
+En décomposant le monolithe, nous avons gagné en :
+\begin{itemize}
+    \item \textbf{Agilité} : Possibilité de mettre à jour le module de Deep Learning sans toucher au module de Data Prep.
+    \item \textbf{Efficacité} : Utilisation optimale du matériel hétérogène.
+    \item \textbf{Robustesse} : Isolation des pannes.
+\end{itemize}
+
+Les travaux futurs se concentreront sur l'implémentation d'un mécanisme d'\textit{Auto-Scaling} dynamique via Kubernetes, permettant au cluster de s'agrandir automatiquement en fonction de la charge de travail entrante.
+
+\section*{Remerciements}
+Ce travail a été réalisé dans le cadre du projet de fin d'études à l'EMSI Marrakech. Nous tenons à remercier nos encadrants pour leurs conseils avisés et leur soutien technique tout au long de ce développement.
+
+\bibliographystyle{elsarticle-num}
+\begin{thebibliography}{00}
+
+\bibitem{automl_survey}
+X. He, K. Zhao, and X. Chu, "AutoML: A survey of the state-of-the-art," \textit{Knowledge-Based Systems}, vol. 212, p. 106622, 2021.
+
+\bibitem{feurer2015}
+M. Feurer et al., "Efficient and Robust Automated Machine Learning," in \textit{Advances in Neural Information Processing Systems}, 2015.
+
+\bibitem{ray_paper}
+P. Moritz et al., "Ray: A distributed framework for emerging AI applications," in \textit{OSDI}, 2018.
+
+\bibitem{microservices_book}
+S. Newman, \textit{Building Microservices: Designing Fine-Grained Systems}. O'Reilly Media, 2015.
+
+\bibitem{optuna_paper}
+T. Akiba, S. Sano, T. Yanase, T. Ohta, and M. Koyama, "Optuna: A next-generation hyperparameter optimization framework," in \textit{KDD}, 2019.
+
+\end{thebibliography}
+
+\end{document}

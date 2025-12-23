@@ -1,35 +1,24 @@
 from fastapi import FastAPI
-from .pipeline import apply_pipeline
-from .minio_client import download_file_from_minio, upload_file_to_minio  # <-- corrigé
-import pandas as pd
-import yaml
-import json
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.prepare import router as prepare_router
 
-app = FastAPI()
+app = FastAPI(title="DataPreparer Service", version="1.0.0")
 
-@app.post("/prepare")
-def prepare_dataset(file_path: str, pipeline: dict):
-    """
-    Endpoint pour préparer un dataset :
-    1. Télécharger depuis MinIO
-    2. Charger avec pandas
-    3. Appliquer le pipeline de transformations
-    4. Sauvegarder le dataset nettoyé dans MinIO
-    """
-    # 1. Télécharger le fichier depuis MinIO
-    local_file = download_file_from_minio(file_path)
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # 2. Charger les données dans pandas
-    df = pd.read_csv(local_file)
+app.include_router(prepare_router, prefix="/api/v1", tags=["prepare"])
 
-    # 3. Appliquer le pipeline
-    df = apply_pipeline(df, pipeline)
+@app.get("/")
+def root():
+    return {"service": "DataPreparer", "status": "running"}
 
-    # 4. Sauvegarder la version nettoyée dans MinIO
-    cleaned_path = "cleaned/" + local_file
-    upload_file_to_minio(cleaned_path, df)
-
-    return {
-        "status": "success",
-        "cleaned_dataset_path": cleaned_path
-    }
+@app.get("/health")
+def health():
+    return {"status": "healthy"}

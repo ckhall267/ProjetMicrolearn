@@ -11,3 +11,5 @@ alembic
 psycopg2-binary
 pydantic
 python-dotenv
+minio
+chardet

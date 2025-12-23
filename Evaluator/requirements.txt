@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pandas
+scikit-learn
+plotly
+minio
+nats-py
+python-dotenv
+python-multipart
+boto3
