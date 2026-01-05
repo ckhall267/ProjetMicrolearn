@@ -1,0 +1,247 @@
+
+
+services:
+  # --- Infrastructure ---
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    container_name: microlearn-minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./minio-data:/data
+    networks:
+      - microlearn-net
+
+  postgres:
+    image: postgres:15
+    container_name: microlearn-postgres
+    environment:
+      POSTGRES_USER: mluser
+      POSTGRES_PASSWORD: mlpass
+      POSTGRES_DB: microlearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - microlearn-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: microlearn-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - microlearn-net
+
+  nats:
+    image: nats:latest
+    container_name: microlearn-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    networks:
+      - microlearn-net
+
+  mlflow:
+    build:
+      context: ./MLflow
+    container_name: microlearn-mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:////mlflow/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=s3://mlflow/
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+    command: mlflow server --backend-store-uri sqlite:////mlflow/mlflow.db --default-artifact-root s3://mlflow/ --host 0.0.0.0
+    depends_on:
+      - minio
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - microlearn-net
+
+  # --- Microservices ---
+  datapreparer:
+    build: 
+      context: ./DataPreparer
+    container_name: microlearn-datapreparer
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_BUCKET=microlearn-data
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=mluser
+      - POSTGRES_PASSWORD=mlpass
+      - POSTGRES_DB=microlearn
+    ports:
+      - "8000:8000"
+    depends_on:
+      - minio
+      - postgres
+    networks:
+      - microlearn-net
+
+  modelselector:
+    build: 
+      context: ./ModelSelector
+    container_name: microlearn-modelselector
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_BUCKET=microlearn-data
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=mluser
+      - POSTGRES_PASSWORD=mlpass
+      - POSTGRES_DB=microlearn
+    ports:
+      - "8001:8001"
+    depends_on:
+      - minio
+      - postgres
+    networks:
+      - microlearn-net
+
+  trainer:
+    build: 
+      context: ./Trainer
+    container_name: microlearn-trainer
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_BUCKET=microlearn-data
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    ports:
+      - "8002:8002"
+    depends_on:
+      - minio
+      - mlflow
+    networks:
+      - microlearn-net
+
+  evaluator:
+    build: 
+      context: ./Evaluator
+    container_name: microlearn-evaluator
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_BUCKET=microlearn-data
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=mluser
+      - POSTGRES_PASSWORD=mlpass
+      - POSTGRES_DB=microlearn
+    ports:
+      - "8003:8003"
+    depends_on:
+      - minio
+      - postgres
+    networks:
+      - microlearn-net
+
+  hyperopt:
+    build: 
+      context: ./HyperOpt
+    container_name: microlearn-hyperopt
+    command: uvicorn main:app --host 0.0.0.0 --port 8004
+    environment:
+      - TRAINER_API_URL=http://trainer:8002/api/v1
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8004:8004"
+    depends_on:
+      - trainer
+      - redis
+    networks:
+      - microlearn-net
+
+  orchestrator:
+    build:
+      context: ./Orchestrator
+    container_name: microlearn-orchestrator
+    environment:
+      - DATA_PREPARER_URL=http://datapreparer:8000/api/v1
+      - MODEL_SELECTOR_URL=http://modelselector:8001/api/v1
+      - TRAINER_URL=http://trainer:8002/api/v1
+      - EVALUATOR_URL=http://evaluator:8003/api/v1
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "3100:3100"
+    depends_on:
+      - redis
+      - nats
+    networks:
+      - microlearn-net
+
+  deployer:
+    build: 
+      context: ./Deployer
+    container_name: microlearn-deployer
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minio
+      - MINIO_SECRET_KEY=minio123
+      - MINIO_BUCKET=microlearn-data
+    ports:
+      - "5001:5001"
+    depends_on:
+      - minio
+    networks:
+      - microlearn-net
+
+  authservice:
+    build:
+      context: ./AuthService
+    container_name: microlearn-authservice
+    environment:
+      - DATABASE_URL=postgresql://mluser:mlpass@postgres:5432/microlearn
+    ports:
+      - "8005:8005"
+    depends_on:
+      - postgres
+    networks:
+      - microlearn-net
+
+  # --- Frontend ---
+  frontend:
+    build: 
+      context: ./microlearn-frontend
+    container_name: microlearn-frontend
+    environment:
+      - REACT_APP_DATAPREPARER_API=http://localhost:8000/api/v1
+      - REACT_APP_MODEL_SELECTOR_API=http://localhost:8001/api/v1
+      - REACT_APP_TRAINER_API=http://localhost:8002/api/v1
+      - REACT_APP_EVALUATOR_API=http://localhost:8003/api/v1
+      - REACT_APP_HYPEROPT_API=http://localhost:8004/api/v1
+      - REACT_APP_ORCHESTRATOR_API=http://localhost:3100
+      - REACT_APP_DEPLOYER_API=http://localhost:5001
+      - REACT_APP_AUTH_API=http://localhost:8005/auth
+    ports:
+      - "3000:3000"
+    stdin_open: true    
+    tty: true           
+    networks:
+      - microlearn-net
+
+volumes:
+  minio_data:
+  pgdata:
+  redis_data:
+  mlflow_data:
+
+networks:
+  microlearn-net:
+    driver: bridge

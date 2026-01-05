@@ -7,7 +7,9 @@ app = FastAPI(title="MicroLearn HyperOpt Service")
 
 class OptimizationRequest(BaseModel):
     study_name: str
-    model_type: str # e.g., "random_forest", "xgboost"
+    model_type: str # e.g., "random_forest_clf", "xgboost"
+    dataset_path: str
+    target_column: str
     n_trials: int = 20
     direction: str = "maximize" # "maximize" or "minimize"
     metric: str = "accuracy"

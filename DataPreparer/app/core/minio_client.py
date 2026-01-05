@@ -14,8 +14,8 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET", "microlearn-data")
 
 client = Minio(
     MINIO_ENDPOINT,
-    access_key="minio123",
-    secret_key="minio123",
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
     secure=MINIO_SECURE
 )
 
@@ -119,3 +119,23 @@ def upload_file_to_minio(path: str, df: pd.DataFrame, bucket: Optional[str] = No
         # Nettoyer le fichier temporaire
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+def upload_raw_file_to_minio(file_data, file_name: str, length: int, bucket: Optional[str] = None) -> str:
+    """
+    Upload un fichier brut (file-like object) vers MinIO
+    """
+    bucket_name = bucket or MINIO_BUCKET
+    ensure_bucket(bucket_name)
+
+    try:
+        client.put_object(
+            bucket_name,
+            file_name,
+            file_data,
+            length=length,
+            content_type="application/octet-stream"
+        )
+        return f"{bucket_name}/{file_name}"
+    except S3Error as e:
+        raise Exception(f"Erreur lors de l'upload vers MinIO: {e}")
+

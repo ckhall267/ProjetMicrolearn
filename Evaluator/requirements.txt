@@ -4,7 +4,7 @@ pandas
 scikit-learn
 plotly
 minio
-nats-py
 python-dotenv
 python-multipart
-boto3
+sqlalchemy
+psycopg2-binary

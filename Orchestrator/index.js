@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 // Connexion NATS (simulée pour l'instant si pas de serveur)
 async function startNats() {
     try {
-        const nc = await connect({ servers: "localhost:4222" });
+        const nc = await connect({ servers: process.env.NATS_URL || "nats:4222" });
         console.log("Connected to NATS");
         return nc;
     } catch (err) {
@@ -49,10 +49,23 @@ app.post('/pipeline/execute', async (req, res) => {
     }
 });
 
-app.get('/status/:id', (req, res) => {
-    const status = workflowEngine.getStatus(req.params.id);
-    if (!status) return res.status(404).json({ error: "Execution ID not found" });
-    res.json(status);
+app.get('/status/:id', async (req, res) => {
+    try {
+        const status = await workflowEngine.getStatus(req.params.id);
+        if (!status) return res.status(404).json({ error: "Execution ID not found" });
+        res.json(status);
+    } catch (err) {
+        res.status(500).json({ error: "Failed to get status", details: err.message });
+    }
+});
+
+app.get('/history', async (req, res) => {
+    try {
+        const history = await workflowEngine.listPipelines();
+        res.json({ history });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch history", details: err.message });
+    }
 });
 
 app.listen(port, () => {

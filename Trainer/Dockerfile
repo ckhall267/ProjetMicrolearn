@@ -7,7 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --upgrade pip
+# Splitting heavy installs to avoid timeouts
+RUN pip install --default-timeout=1000 --no-cache-dir torch
+RUN pip install --default-timeout=1000 --no-cache-dir pytorch-lightning
+RUN pip install --default-timeout=1000 --no-cache-dir ray[default]
+RUN pip install --default-timeout=1000 --no-cache-dir -r /app/requirements.txt
 
 COPY app /app/app
 # Note: copying 'app' folder content into '/app/app' to match import structure 'from app.api...'
@@ -27,7 +32,8 @@ COPY app /app/app
 # If I do `COPY app /app`, then inside container /app has main.py.
 # Correct.
 
-COPY app /app
-
+COPY app /app/app
+ 
 EXPOSE 8002
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+ENV PYTHONPATH=/app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]

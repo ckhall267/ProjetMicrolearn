@@ -58,9 +58,14 @@ class ModelCompatibility(Base):
 
 
 # Configuration de la base de données
+user = os.getenv("POSTGRES_USER", "mluser")
+password = os.getenv("POSTGRES_PASSWORD", "mlpass")
+server = os.getenv("POSTGRES_SERVER", "localhost")
+db_name = os.getenv("POSTGRES_DB", "microlearn")
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://mluser:mlpass@localhost:5432/microlearn"
+    f"postgresql://{user}:{password}@{server}:5432/{db_name}"
 )
 
 engine = create_engine(DATABASE_URL)

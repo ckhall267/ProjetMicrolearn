@@ -13,8 +13,28 @@ const AutoML = () => {
     hyperopt: false,
     crossValidation: true,
   });
+  const [datasets, setDatasets] = useState([]);
 
   const MODEL_SELECTOR_API = process.env.REACT_APP_MODEL_SELECTOR_API || 'http://localhost:8001/api/v1';
+  const ORCHESTRATOR_API = process.env.REACT_APP_ORCHESTRATOR_API || 'http://localhost:3100';
+  const DATAPREPARER_API = process.env.REACT_APP_DATAPREPARER_API || 'http://localhost:8000/api/v1';
+
+  // Charger la liste des datasets au chargement
+  useEffect(() => {
+    fetchDatasets();
+  }, []);
+
+  const fetchDatasets = async () => {
+    try {
+      const response = await fetch(`${DATAPREPARER_API}/datasets`);
+      if (response.ok) {
+        const data = await response.json();
+        setDatasets(data.datasets || []);
+      }
+    } catch (error) {
+      console.error('Erreur chargement datasets:', error);
+    }
+  };
 
   // Charger les modèles recommandés quand un dataset est sélectionné
   useEffect(() => {
@@ -26,6 +46,10 @@ const AutoML = () => {
   const selectRecommendedModels = async () => {
     setModelSelectionLoading(true);
     try {
+      // Trouver le chemin réel du dataset sélectionné
+      const selectedDsObject = datasets.find(d => d.dataset_id === selectedDataset);
+      const realDatasetPath = selectedDsObject ? selectedDsObject.original_path : `microlearn-data/datasets/${selectedDataset}`;
+
       const response = await fetch(`${MODEL_SELECTOR_API}/select`, {
         method: 'POST',
         headers: {
@@ -33,7 +57,7 @@ const AutoML = () => {
         },
         body: JSON.stringify({
           dataset_id: selectedDataset,
-          dataset_path: `microlearn-data/datasets/${selectedDataset}`,
+          dataset_path: realDatasetPath,
           target_column: targetColumn || null,
           task_type: taskType || null,
           metric: 'accuracy',
@@ -64,7 +88,7 @@ const AutoML = () => {
     );
   };
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
     console.log('Exécution du pipeline AutoML avec:', {
       dataset: selectedDataset,
       target_column: targetColumn,
@@ -72,7 +96,42 @@ const AutoML = () => {
       models: selectedModels,
       config: pipelineConfig,
     });
-    // Ici, vous appelleriez l'API de l'Orchestrator
+
+    setLoading(true);
+    try {
+      // Trouver le chemin réel du dataset sélectionné (Fix cohérent avec selectRecommendedModels)
+      const selectedDsObject = datasets.find(d => d.dataset_id === selectedDataset);
+      const realDatasetPath = selectedDsObject ? selectedDsObject.original_path : `microlearn-data/datasets/${selectedDataset}`;
+
+      const response = await fetch(`${ORCHESTRATOR_API}/pipeline/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dataset_id: selectedDataset,
+          dataset_path: realDatasetPath,
+          target_column: targetColumn,
+          task_type: taskType,
+          models: selectedModels,
+          config: pipelineConfig
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Pipeline démarré avec succès! ID: ${data.executionId}`);
+        // TODO: Rediriger vers la page de résultats ou dashboard
+      } else {
+        const errorData = await response.json();
+        alert(`Erreur lors du démarrage du pipeline: ${errorData.error || 'Erreur inconnue'}`);
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      alert('Erreur de connexion à l\'Orchestrateur');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -93,12 +152,18 @@ const AutoML = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Sélectionner un dataset</option>
-                <option value="dataset1">Iris Dataset</option>
-                <option value="dataset2">House Prices</option>
-                <option value="dataset3">Customer Churn</option>
+                {datasets.length > 0 ? (
+                  datasets.map((ds) => (
+                    <option key={ds.dataset_id} value={ds.dataset_id}>
+                      {ds.original_path} (ID: {ds.dataset_id})
+                    </option>
+                  ))
+                ) : (
+                  <option disabled>Aucun dataset disponible (Uploadez-en un d'abord)</option>
+                )}
               </select>
             </div>
-            
+
             {selectedDataset && (
               <>
                 <div>
@@ -113,7 +178,7 @@ const AutoML = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Type de tâche
@@ -128,7 +193,7 @@ const AutoML = () => {
                     <option value="regression">Régression</option>
                   </select>
                 </div>
-                
+
                 <button
                   onClick={selectRecommendedModels}
                   disabled={modelSelectionLoading}
@@ -150,7 +215,7 @@ const AutoML = () => {
               </span>
             )}
           </div>
-          
+
           {modelSelectionLoading ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -166,11 +231,10 @@ const AutoML = () => {
                   <div
                     key={model.name}
                     onClick={() => toggleModel(model.name)}
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedModels.includes(model.name)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedModels.includes(model.name)
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
@@ -194,7 +258,7 @@ const AutoML = () => {
                         </svg>
                       )}
                     </div>
-                    
+
                     <div className="mt-2 space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-gray-600">Score de compatibilité:</span>
@@ -211,7 +275,7 @@ const AutoML = () => {
                         <p className="text-xs text-gray-500 mt-2 italic">{model.reason}</p>
                       )}
                     </div>
-                    
+
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs font-medium text-gray-700 mb-1">Types de tâches:</p>
                       <div className="flex flex-wrap gap-1">

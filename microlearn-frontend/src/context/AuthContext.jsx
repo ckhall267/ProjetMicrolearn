@@ -8,7 +8,7 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const API_URL = 'http://localhost:8000/auth';
+    const API_URL = process.env.REACT_APP_AUTH_API || 'http://localhost:8005/auth';
 
     useEffect(() => {
         const fetchUser = async () => {

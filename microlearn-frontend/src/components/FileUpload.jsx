@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const FileUpload = ({ onFileSelect, acceptedTypes = '.csv,.json', maxSizeMB = 100 }) => {
+const FileUpload = ({ onFileSelect, onUpload, acceptedTypes = '.csv,.json', maxSizeMB = 100 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -59,21 +59,42 @@ const FileUpload = ({ onFileSelect, acceptedTypes = '.csv,.json', maxSizeMB = 10
     setUploading(true);
     setUploadProgress(0);
 
-    // Simuler l'upload (à remplacer par un vrai appel API)
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
+    try {
+      if (onUpload) {
+        // Pseudo-progress for UX if onUpload doesn't report progress
+        const interval = setInterval(() => {
+          setUploadProgress((prev) => (prev < 90 ? prev + 10 : prev));
+        }, 500);
 
-    // Ici, vous appelleriez votre API pour uploader le fichier
-    // await uploadFile(selectedFile);
+        await onUpload(selectedFile);
+
+        clearInterval(interval);
+        setUploadProgress(100);
+        setTimeout(() => setUploading(false), 1000);
+      } else {
+        // Fallback simulation
+        const interval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev >= 100) {
+              clearInterval(interval);
+              setUploading(false);
+              return 100;
+            }
+            return prev + 10;
+          });
+        }, 200);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      setUploading(false);
+      setUploadProgress(0);
+      alert("Erreur lors de l'upload: " + (error.message || "Erreur inconnue"));
+    }
   };
+
+  // WAIT. It is better to use replace_file_content on the PROPS definition too.
+  // Let's do a bigger replace or just change the logic to call a new prop 'onUploadAction'
+
 
   const removeFile = () => {
     setSelectedFile(null);
@@ -83,11 +104,10 @@ const FileUpload = ({ onFileSelect, acceptedTypes = '.csv,.json', maxSizeMB = 10
   return (
     <div className="w-full">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-          dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400'
-        }`}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${dragActive
+          ? 'border-blue-500 bg-blue-50'
+          : 'border-gray-300 hover:border-gray-400'
+          }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}

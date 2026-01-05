@@ -11,10 +11,24 @@ const ModelSelector = () => {
   const [showAllModels, setShowAllModels] = useState(false);
 
   const MODEL_SELECTOR_API = process.env.REACT_APP_MODEL_SELECTOR_API || 'http://localhost:8001/api/v1';
+  const DATAPREPARER_API = process.env.REACT_APP_DATAPREPARER_API || 'http://localhost:8000/api/v1';
 
   useEffect(() => {
     fetchAllModels();
+    fetchDatasets();
   }, []);
+
+  const fetchDatasets = async () => {
+    try {
+      const response = await fetch(`${DATAPREPARER_API}/datasets`);
+      if (response.ok) {
+        const data = await response.json();
+        setDatasets(data.datasets || []);
+      }
+    } catch (error) {
+      console.error('Erreur chargement datasets:', error);
+    }
+  };
 
   const fetchAllModels = async () => {
     try {
@@ -70,13 +84,13 @@ const ModelSelector = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">ModelSelector</h1>
-        
+
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-blue-900 mb-2">
             Sélection automatique de modèles
           </h2>
           <p className="text-blue-800">
-            Le service ModelSelector analyse votre dataset et recommande automatiquement 
+            Le service ModelSelector analyse votre dataset et recommande automatiquement
             les modèles d'apprentissage automatique les plus adaptés en fonction de :
           </p>
           <ul className="list-disc list-inside mt-2 text-blue-700 space-y-1">
@@ -100,12 +114,18 @@ const ModelSelector = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Sélectionner un dataset</option>
-                <option value="dataset1">Iris Dataset</option>
-                <option value="dataset2">House Prices</option>
-                <option value="dataset3">Customer Churn</option>
+                {datasets.length > 0 ? (
+                  datasets.map((ds) => (
+                    <option key={ds.dataset_id} value={ds.dataset_id}>
+                      {ds.original_path} (ID: {ds.dataset_id})
+                    </option>
+                  ))
+                ) : (
+                  <option disabled>Aucun dataset disponible (Uploadez-en un d'abord)</option>
+                )}
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Colonne cible
@@ -118,7 +138,7 @@ const ModelSelector = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Type de tâche
@@ -133,7 +153,7 @@ const ModelSelector = () => {
                 <option value="regression">Régression</option>
               </select>
             </div>
-            
+
             <div className="flex items-end">
               <button
                 onClick={handleSelectModels}
@@ -170,13 +190,13 @@ const ModelSelector = () => {
                           {model.category}
                         </span>
                       </div>
-                      
+
                       {model.reason && (
                         <p className="text-sm text-gray-600 mb-3 italic">
                           {model.reason}
                         </p>
                       )}
-                      
+
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
                         <div>
                           <p className="text-xs text-gray-500">Types de tâches</p>
@@ -188,7 +208,7 @@ const ModelSelector = () => {
                             ))}
                           </div>
                         </div>
-                        
+
                         <div>
                           <p className="text-xs text-gray-500">Caractéristiques</p>
                           <div className="mt-1 space-y-1">
@@ -204,12 +224,12 @@ const ModelSelector = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div>
                           <p className="text-xs text-gray-500">Min. échantillons</p>
                           <p className="text-sm font-medium">{model.min_samples}</p>
                         </div>
-                        
+
                         <div>
                           <p className="text-xs text-gray-500">Max. features</p>
                           <p className="text-sm font-medium">
@@ -217,7 +237,7 @@ const ModelSelector = () => {
                           </p>
                         </div>
                       </div>
-                      
+
                       {model.hyperparameters && Object.keys(model.hyperparameters).length > 0 && (
                         <details className="mt-3">
                           <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-800">
@@ -250,7 +270,7 @@ const ModelSelector = () => {
               {showAllModels ? 'Masquer' : 'Afficher'}
             </button>
           </div>
-          
+
           {showAllModels && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {allModels.map((model) => (

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from app.core.pipeline import apply_pipeline
-from app.core.minio_client import download_file_from_minio, upload_file_to_minio
+from app.core.minio_client import download_file_from_minio, upload_file_to_minio, upload_raw_file_to_minio
 from app.core.database import save_dataframe_to_db, engine
 import pandas as pd
 import os
@@ -10,7 +10,40 @@ import json
 from sqlalchemy import text
 import chardet  # <-- ajouté pour détecter l'encodage
 
+
 router = APIRouter()
+
+@router.get("/datasets")
+def list_datasets():
+    """Lister tous les datasets disponibles"""
+    try:
+        # Vérifier si la table existe d'abord (pour éviter crash au tout début)
+        # Mais on suppose que 'dataset_metadata' est créé au premier upload.
+        # On va tenter le select.
+        query = text("SELECT dataset_id, original_path, created_at FROM dataset_metadata ORDER BY created_at DESC")
+        # Note: created_at n'est peut-être pas dans le schéma actuel, on va vérifier le save.
+        # Le save fait: metadata_df.to_sql("dataset_metadata", ...). Pandas crée la table.
+        # Pandas n'ajoute pas created_at automatiquement sauf si dans le DF.
+        # Dans prepare_dataset:
+        # metadata_df = pd.DataFrame([{ "dataset_id": ..., ... }])
+        # Donc pas de timestamp pour l'instant. On va juste select tout.
+        
+        query = text("SELECT dataset_id, original_path, table_name, rows, columns FROM dataset_metadata")
+        result = pd.read_sql(query, engine)
+        
+        datasets = result.to_dict("records")
+        # Parser les colonnes si c'est des strings JSON
+        for d in datasets:
+            if isinstance(d.get("columns"), str):
+                d["columns"] = json.loads(d["columns"])
+                
+        return {"datasets": datasets}
+    except Exception as e:
+        # Si la table n'existe pas encore (aucun upload), on retourne vide
+        if "relation \"dataset_metadata\" does not exist" in str(e):
+             return {"datasets": []}
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des datasets: {str(e)}")
+
 
 class PipelineStep(BaseModel):
     name: str
@@ -130,5 +163,50 @@ def get_prepared_dataset(dataset_id: str):
         return metadata
     except HTTPException:
         raise
+@router.post("/upload")
+async def upload_dataset(file: UploadFile = File(...)):
+    """
+    Endpoint pour uploader un dataset brut vers MinIO
+    """
+    try:
+        # Lire le fichier en mémoire (attention aux gros fichiers, mais ok pour démo)
+        contents = await file.read()
+        file_size = len(contents)
+        
+        # Reset curseur pour upload
+        await file.seek(0)
+        
+        # Nom du fichier dans MinIO (on garde le nom d'origine pour simplifier)
+        filename = file.filename
+        
+        # Upload
+        minio_path = upload_raw_file_to_minio(file.file, filename, file_size)
+        
+        # Enregistrer les métadonnées pour qu'il apparaisse dans la liste
+        dataset_id = f"dataset_{pd.Timestamp.now().value}"
+        
+        # On ne connaît pas encore les colonnes/lignes car c'est brut,
+        # mais on crée l'entrée pour qu'elle soit listable.
+        metadata_df = pd.DataFrame([{
+            "dataset_id": dataset_id,
+            "table_name": None, # Pas encore de table SQL
+            "original_path": minio_path,
+            "cleaned_path": None,
+            "rows": 0,
+            "columns": json.dumps([]),
+            "pipeline": json.dumps({})
+        }])
+        
+        # Sauvegarde en bdd
+        metadata_df.to_sql("dataset_metadata", engine, if_exists="append", index=False)
+
+        return {
+            "status": "success",
+            "message": f"Fichier {filename} uploadé avec succès",
+            "minio_path": minio_path,
+            "filename": filename,
+            "dataset_id": dataset_id
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de l'upload: {str(e)}")
+

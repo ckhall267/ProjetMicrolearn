@@ -9,8 +9,27 @@ const UploadDataset = () => {
     // Ici, vous pouvez ajouter la logique pour traiter le fichier
   };
 
-  const handleUploadComplete = (file) => {
+  const handleUploadAction = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const API_URL = process.env.REACT_APP_DATAPREPARER_API || 'http://localhost:8000/api/v1';
+
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Erreur lors de l\'upload');
+    }
+
+    const data = await response.json();
+    console.log("Upload success:", data);
+
     setUploadedFiles((prev) => [...prev, file]);
+    // On pourrait aussi ajouter les métadonnées retournées par l'API
   };
 
   return (
@@ -26,6 +45,7 @@ const UploadDataset = () => {
 
           <FileUpload
             onFileSelect={handleFileSelect}
+            onUpload={handleUploadAction}
             acceptedTypes=".csv,.json"
             maxSizeMB={100}
           />
